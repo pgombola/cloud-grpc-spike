@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "dataflow.pb";
+option java_outer_classname = "DataFlowProto";
+
+package dataflow;
+
+service Outbound {
+  rpc InitOutboundTransfer (Flow) returns (Accept) {}
+  rpc SendPayload (Payload) returns (Transfer) {}
+  rpc SendChunk (stream Chunk) returns (stream Result) {}
+}
+
+message Chunk {
+  bytes data = 1;
+}
+
+message Result {
+  enum Status {
+  	RECEIVED = 0;
+  	FAILED = 1;
+  }
+  Status status = 1;
+  int64 length = 2;
+}
+
+message Flow {
+  int32 jobId = 1;
+  int32 endpointId = 2;
+  string sessionId = 3;
+}
+
+message Accept {
+  enum InitStatus {
+  	ACCEPTED = 0;
+  	REJECTED = 1;
+  }
+  Flow flow = 1;
+  InitStatus status = 2;
+}
+
+message Payload {
+  message Meta {
+  	map<string, string> headers = 1;
+  	int32 jobId = 2;	
+  }
+  Meta metadata = 1;
+  string filename = 2;
+  string contentType = 3;
+  int32 length = 4;
+  bytes data = 5;
+}
+
+message Transfer {
+  enum Status {
+  	SUCCESS = 0;
+  	FAILURE = 1;
+  	RECEIPT_PENDING = 2;
+  }
+  int32 jobId = 1;
+  Status status = 2;
+  int32 transferId = 3;
+}
