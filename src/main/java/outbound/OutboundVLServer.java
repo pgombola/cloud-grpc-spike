@@ -1,5 +1,6 @@
 package outbound;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -62,17 +63,29 @@ public class OutboundVLServer {
 			return new StreamObserver<Chunk>() {
 
 				long totalBytes = 0;
-				
+
 				@Override
 				public void onNext(Chunk value) {
-					totalBytes += value.getData().size();
-					responseObserver.onNext(Result.newBuilder().build());
+					try (BufferedInputStream dis = new BufferedInputStream(value.getData().newInput())) {
+						int read = 0;
+						byte[] bytes = new byte[16384];
+						try {
+							while ((read = dis.read(bytes)) != -1) {
+								totalBytes += read;
+							}
+							responseObserver.onNext(Result.newBuilder().setLength(totalBytes).build());
+						} catch (IOException e) {
+							System.out.println("Error reading byte stream.");
+						}
+					} catch (IOException e) {
+						System.out.println("Error closing byte stream.");
+					}
 				}
 
 				@Override
 				public void onError(Throwable t) {
 					// TODO Auto-generated method stub
-					
+
 				}
 
 				@Override
@@ -91,16 +104,16 @@ public class OutboundVLServer {
 			// Validate these somehow.
 			int rando = new Random().nextInt(Integer.MAX_VALUE);
 			String sessionId = String.format("%d-%d-%d", jobId, endpointId, rando);
-			
-			
+
+
 			responseObserver.onNext(
 					Accept.newBuilder()
-						.setFlow(Flow.newBuilder()
-								.setJobId(jobId)
-								.setSessionId(sessionId)
-								.build())
-						.setStatusValue(new Random().nextInt(Accept.InitStatus.values().length))
-						.build());
+					.setFlow(Flow.newBuilder()
+							.setJobId(jobId)
+							.setSessionId(sessionId)
+							.build())
+					.setStatusValue(new Random().nextInt(Accept.InitStatus.values().length))
+					.build());
 			responseObserver.onCompleted();
 		}
 
@@ -108,27 +121,27 @@ public class OutboundVLServer {
 		public void sendPayload(Payload request, StreamObserver<Transfer> responseObserver) {
 			StringBuilder log = new StringBuilder("*** received payload:\n");
 			Meta meta = request.getMetadata();
-//			log.append(String.format("\tjobId=%d\n", meta.getJobId()));
-//			log.append("\tHeaders:\n");
-//			for (Map.Entry<String, String> entry : meta.getHeadersMap().entrySet()) {
-//				log.append(String.format("\t\t%s=%s\n", entry.getKey(), entry.getValue()));
-//			}
-//			
-//			// Get the data size transferred
-//			try (BufferedInputStream is = new BufferedInputStream(request.getData().newInput())) {	
-//				byte[] buf = new byte[16384];
-//				log.append("\tData:\n");
-//				int total = 0;
-//				int nRead = 0;
-//				while ((nRead = is.read(buf)) != -1) {
-//					total += nRead;
-//				}
-//				log.append(String.format("\t\tlength=%d\n", total));
-//			} catch(IOException e) {
-//				responseObserver.onError(new Exception("Error reading payload", e));
-//			}
+			//			log.append(String.format("\tjobId=%d\n", meta.getJobId()));
+			//			log.append("\tHeaders:\n");
+			//			for (Map.Entry<String, String> entry : meta.getHeadersMap().entrySet()) {
+			//				log.append(String.format("\t\t%s=%s\n", entry.getKey(), entry.getValue()));
+			//			}
+			//			
+			//			// Get the data size transferred
+			//			try (BufferedInputStream is = new BufferedInputStream(request.getData().newInput())) {	
+			//				byte[] buf = new byte[16384];
+			//				log.append("\tData:\n");
+			//				int total = 0;
+			//				int nRead = 0;
+			//				while ((nRead = is.read(buf)) != -1) {
+			//					total += nRead;
+			//				}
+			//				log.append(String.format("\t\tlength=%d\n", total));
+			//			} catch(IOException e) {
+			//				responseObserver.onError(new Exception("Error reading payload", e));
+			//			}
 			System.out.println(log.toString());
-			
+
 			// Return a random status
 			Status status = Status.forNumber(new Random().nextInt(2));
 			responseObserver.onNext(Transfer.newBuilder().setJobId(meta.getJobId()).setStatus(status).build());

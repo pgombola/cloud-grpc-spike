@@ -16,10 +16,8 @@ import org.apache.commons.cli.Options;
 
 public class OutboundRunner {
 	
-	private static final int chunkSize = 3 * 1024 * 1024;
-	
-	private static final int GB = 1024 * 1024 * 1024;
-	private static final long KB = 1024;
+	private static final int chunkSize = 1 * 1024 * 1024;
+	private static final long GB = 1342177280;
 
 	public static void main(String[] args) throws Exception {
 		Options options = new Options();
@@ -64,14 +62,13 @@ public class OutboundRunner {
 		}
 		if (cmd.hasOption("client")) {
 			StreamingChunkClient client = new StreamingChunkClient(serverPort, serverAddress, chunkSize);
-			for (int i = 10; i < GB; i=i*2) {
-				long dataSize = i * KB;
-				System.out.print(String.format("%d,",dataSize));
+			for (long sizeInBytes = 10240; sizeInBytes <= GB; sizeInBytes *= 2) {
+				System.out.print(String.format("%d,", sizeInBytes));
 				CountDownLatch done = new CountDownLatch(1);
-				DataInputStream data = new DataInputStream(new Random().longs(dataSize), dataSize);
-				new Thread(data.runnable()).start();
+//				DataInputStream data = new DataInputStream(new Random().longs(dataSize), dataSize);
+//				new Thread(data.runnable()).start();
 				long start = System.currentTimeMillis();
-				client.sendData(data, done);
+				client.sendData(new DummyInputStream(sizeInBytes), done);
 				done.await();
 				System.out.println(System.currentTimeMillis() - start);
 			}
@@ -120,7 +117,31 @@ public class OutboundRunner {
 				throw new RuntimeException("Error reading data", e);
 			}
 		}
-		
 	}
+	
+	private static class DummyInputStream extends InputStream {
+		  private final int data[] = { 'H', 'e', 'l', 'l', 'o' };
+
+		  private long bytesRead = 0;
+		  private int dataIndex = 0;
+		  private final long sizeInBytes;
+
+		  public DummyInputStream(long sizeInBytes){
+		    this.sizeInBytes = sizeInBytes;
+		  }
+
+		  @Override
+		  public int read() throws IOException {
+		    if (bytesRead >= sizeInBytes) {
+		      return -1;
+		    } else {
+		      ++bytesRead;
+		      if (dataIndex >= data.length){
+		        dataIndex = 0;
+		      }
+		      return data[dataIndex++];
+		    }
+		  }
+		}
 
 }

@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.protobuf.ByteString;
 
@@ -32,20 +33,24 @@ public class StreamingChunkClient {
 	public void sendData(final InputStream is, final CountDownLatch done) {
 		chunkingService.submit(() -> {
 			final Object received = new Object();
+			final AtomicLong totalBytes = new AtomicLong();
 			StreamObserver<Chunk> chunks = OutboundGrpc.newStub(channel).sendChunk(new StreamObserver<Result>() {
-
+				
+				
 				@Override
 				public void onNext(Result value) {
-					
-					synchronized(received) {
-						received.notify();
+					long receivedBytes = value.getLength();
+//					System.out.print(String.format("%d,", receivedBytes));
+					if (receivedBytes == totalBytes.get()) {
+						synchronized(received) {
+							received.notify();
+						}
 					}
 					// Do some sort of logging here.
 				}
 
 				@Override
 				public void onError(Throwable t) {
-					t.printStackTrace();
 					done.countDown();
 				}
 
@@ -60,12 +65,13 @@ public class StreamingChunkClient {
 			try {
 				while ((nRead = is.read(chunk, 0, chunkSize)) != -1) {
 					chunks.onNext(Chunk.newBuilder().setData(ByteString.copyFrom(chunk, 0, nRead)).build());
-					synchronized(received) {
-						try {
-							received.wait();
-						} catch (InterruptedException e) {
-							chunks.onError(new RuntimeException("Error waiting for result", e));
-						}
+					totalBytes.addAndGet(nRead);
+				}
+				synchronized(received) {
+					try {
+						received.wait();
+					} catch (InterruptedException e) {
+						chunks.onError(new RuntimeException("Error waiting for result", e));
 					}
 				}
 				chunks.onCompleted();
